@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shop Admin - Ultra Fast</title>
+<style>
+body{font-family:system-ui;background:#f3f4f6;margin:0;padding:20px}
+.card{background:white;padding:20px;border-radius:12px;margin-bottom:20px;max-width:800px}
+input,textarea,button{width:100%;padding:12px;margin:6px 0;border:1px solid #ccc;border-radius:8px;font-size:14px}
+button{background:#111;color:white;border:none;cursor:pointer;font-weight:600}
+button:hover{background:#333}
+button.danger{background:#dc2626}
+button.success{background:#16a34a}
+.product{display:flex;gap:12px;border:1px solid #eee;padding:10px;border-radius:8px;margin-bottom:8px;align-items:center}
+.product img{width:50px;height:50px;object-fit:cover;border-radius:6px}
+.hidden{display:none}
+#loading{color:#666}
+
+/* Password wrapper */
+.pw-wrapper{position:relative}
+.pw-wrapper input{padding-right:45px}
+.toggle-pw{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:#666;font-size:20px;cursor:pointer;width:auto;padding:5px}
+.toggle-pw:hover{background:#f3f4f6;border-radius:6px}
+.topbar{margin-bottom:15px}
+</style>
+</head>
+<body>
+
+<div id="login" class="card" style="margin:100px auto;max-width:350px">
+  <h2>Admin Login</h2>
+  <p>Password: <b>admin123</b></p>
+
+  <div class="pw-wrapper">
+    <input id="pw" type="password" placeholder="Password" onkeydown="if(event.key==='Enter') login()">
+    <button type="button" class="toggle-pw" onclick="togglePW()">👁️</button>
+  </div>
+
+  <button onclick="login()">Login</button>
+  <p id="err" style="color:red" class="hidden">Wrong password</p>
+</div>
+
+<div id="panel" class="hidden">
+  <div class="card">
+    <div class="topbar">
+      <a href="shop.html"><button class="success" style="width:auto">View Products in Shop →</button></a>
+    </div>
+    <h3>Add Product</h3>
+    <input id="name" placeholder="Name *">
+    <input id="price" type="number" step="0.01" placeholder="Price K *">
+    <label>Image - Auto compressed:</label>
+    <input id="img" type="file" accept="image/*">
+    <img id="preview" style="width:100px;height:100px;object-fit:cover;display:none;border-radius:8px">
+    <textarea id="desc" placeholder="Description"></textarea>
+    <button id="saveBtn" onclick="add()">Save</button>
+  </div>
+
+  <div class="card">
+    <h3>Products
+      <button onclick="downloadJSON()" style="width:auto;float:right;background:#2563eb;margin-right:8px">Download.json</button>
+      <button onclick="clearAll()" class="danger" style="width:auto;float:right">Clear All</button>
+    </h3>
+    <div id="loading">Loading products...</div>
+    <div id="list"></div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = "myProducts" // MUST match shop.html
+
+// VIEW PASSWORD BUTTON
+function togglePW(){
+  const pw = document.getElementById("pw")
+  const btn = document.querySelector(".toggle-pw")
+  if(pw.type === "password"){ pw.type = "text"; btn.innerText = "🔓" }
+  else { pw.type = "password"; btn.innerText = "👁️" }
+}
+
+function login(){
+  if(document.getElementById("pw").value==="admin123"){
+    document.getElementById("err").classList.add("hidden")
+    document.getElementById("login").classList.add("hidden")
+    document.getElementById("panel").classList.remove("hidden")
+    load()
+  } else {
+    document.getElementById("err").classList.remove("hidden")
+  }
+}
+
+// Compress to tiny thumbnail so it's fast
+function compress(file){
+  return new Promise(r=>{
+    const fr=new FileReader()
+    fr.onload=e=>{
+      const i=new Image()
+      i.onload=()=>{
+        const c=document.createElement('canvas')
+        c.width=200; c.height=i.height*(200/i.width)
+        c.getContext('2d').drawImage(i,0,0,200,c.height)
+        r(c.toDataURL('image/jpeg',0.5))
+      }
+      i.src=e.target.result
+    }
+    fr.readAsDataURL(file)
+  })
+}
+
+document.getElementById("img").onchange = async function(e){
+  const f = e.target.files[0]
+  if(!f) return
+  document.getElementById("saveBtn").innerText = "Compressing..."
+  const tiny = await compress(f)
+  document.getElementById("preview").src = tiny
+  document.getElementById("preview").style.display = "block"
+  window.tempImg = tiny // save it
+  document.getElementById("saveBtn").innerText = "Save"
+}
+
+function getProds(){ return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]") }
+function saveProds(p){ localStorage.setItem(STORAGE_KEY, JSON.stringify(p)) }
+
+async function add(){
+  const name = document.getElementById("name").value.trim()
+  const price = document.getElementById("price").value
+  if(!name ||!price) return alert("Name and Price required")
+
+  let d = getProds()
+  d.push({
+    id: Date.now(),
+    n: name,
+    p: parseFloat(price).toFixed(2),
+    i: window.tempImg || "https://via.placeholder.com/50",
+    d: document.getElementById("desc").value
+  })
+  saveProds(d)
+  alert("Saved! Refresh shop.html to see it")
+  clearForm(); load()
+}
+
+function load(){
+  document.getElementById("loading").innerText = ""
+  let d = getProds()
+  document.getElementById("list").innerHTML = d.length === 0? "No products yet" : d.map(x=>`
+    <div class="product">
+      <img src="${x.i}" loading="lazy">
+      <div style="flex:1"><b>${x.n}</b> K${x.p}<br><small>${x.d || ''}</small></div>
+      <button onclick="del(${x.id})" class="danger" style="width:auto">X</button>
+    </div>
+  `).join("")
+}
+
+function del(id){
+  if(confirm("Delete?")){
+    saveProds(getProds().filter(x=>x.id!= id))
+    load()
+  }
+}
+
+function clearForm(){
+  document.getElementById("name").value = ""
+  document.getElementById("price").value = ""
+  document.getElementById("img").value = ""
+  document.getElementById("preview").style.display = "none"
+  document.getElementById("desc").value = ""
+  window.tempImg = ""
+}
+
+function clearAll(){
+  if(confirm("Delete EVERYTHING?")){
+    localStorage.removeItem(STORAGE_KEY)
+    load()
+  }
+}
+
+function downloadJSON(){
+  let d = getProds()
+  if(d.length === 0) return alert("No products to download yet")
+
+  // Convert your short keys to full names
+  let products = d.map(x => ({
+    id: x.id,
+    name: x.n,
+    price: parseFloat(x.p),
+    image: x.i,
+    description: x.d || ""
+  }))
+
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(products, null, 2));
+  const a = document.createElement("a");
+  a.setAttribute("href", dataStr);
+  a.setAttribute("download", "products.json");
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  alert("Downloaded products.json")
+}
+</script>
+</body>
+</html>
